@@ -1,15 +1,18 @@
 # SSE Software Rasterizer
 
-A tile‑based software renderer using SSE2 intrinsics and C++17 parallel algorithms on Windows.
+A multi-threaded tile‑based software renderer using SSE intrinsics on Windows.
 
 ---
-
+## 📋 Prerequisites
+- Windows
+- Python (for `init.py`)
+- Conan (C++ package manager)
+- Visual Studio
 ## 🛠 Getting Started
-
 ```powershell
-git clone https://github.com/your-username/SSE-Software-Rasterizer.git
+git clone https://github.com/Cameron2001/SSE_Software_Rasterizer
 cd SSE-Software-Rasterizer
-python init.py      # generates & installs everything, then opens the VS solution
+python init.py
 ```
 
 Open `SSESoftwareRasterizer.sln` in Visual Studio 2022, choose Debug or Release, and run.
@@ -18,16 +21,16 @@ Open `SSESoftwareRasterizer.sln` in Visual Studio 2022, choose Debug or Releas
 
 ## 🚀 Features
 
-- Quad‑pixel SIMD (`__m128`) rasterization  
-- Backface culling via signed‑area test  
-- Perspective‑correct attribute interpolation  
-- 16×16 tile binning + `std::execution::par` parallelism  
-- SIMD‑accelerated Z‑buffer depth test  
-- Directional lighting (ambient + Lambertian diffuse)  
+- 16×16 tile binning for workload division  
+- Multithreaded, lock-free tile dispatch using `std::execution::par`  
+- Backface culling
+- 4 pixel wide SIMD processing
+- Perspective-correct interpolation of depth, UVs, and normals  
+- Simple ambient + Lambertian diffuse shading  
 
 ---
 
-## 🏗 Architecture & Algorithm
+## 🏗 Algorithm
 
 **1. Tile grid**  
 &nbsp;&nbsp;Divide the screen into 16×16 pixel tiles.
@@ -42,7 +45,7 @@ Open `SSESoftwareRasterizer.sln` in Visual Studio 2022, choose Debug or Releas
 &nbsp;&nbsp;Within each tile, walk horizontal scanlines to cover candidate pixels.
 
 **5. Edge tests**  
-&nbsp;&nbsp;Evaluate half‑space equations (A·x + B·y + C ≥ 0) on 4 pixels at once using SSE2.
+&nbsp;&nbsp;Evaluate half‑space equations (A·x + B·y + C ≥ 0) on 4 pixels at once using SSE.
 
 **6. Barycentric weights**  
 &nbsp;&nbsp;Derive depth, UV and normal interpolation factors from edge values.
