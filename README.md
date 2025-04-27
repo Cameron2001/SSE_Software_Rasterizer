@@ -8,6 +8,7 @@ A multi-threaded tile‑based software renderer using SSE intrinsics on Windows.
 - Python (for `init.py`)
 - Conan (C++ package manager)
 - Visual Studio
+---
 ## 🛠 Getting Started
 ```powershell
 git clone https://github.com/Cameron2001/SSE_Software_Rasterizer
