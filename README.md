@@ -50,7 +50,7 @@ Open `SSESoftwareRasterizer.sln` in Visual Studio 2022, choose Debug or Releas
 **6. Barycentric weights**  
 &nbsp;&nbsp;Derive depth, UV and normal interpolation factors from edge values.
 
-**7. Depth Testing**
+**7. Depth Testing**  
 &nbsp;&nbsp;Perform depth testing to skip occluded pixels.
 
 **8. Perspective‑correct**  
