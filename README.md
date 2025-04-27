@@ -50,11 +50,14 @@ Open `SSESoftwareRasterizer.sln` in Visual Studio 2022, choose Debug or Releas
 **6. Barycentric weights**  
 &nbsp;&nbsp;Derive depth, UV and normal interpolation factors from edge values.
 
-**7. Perspective‑correct**  
+**7. Depth Testing**
+&nbsp;&nbsp;Perform depth testing to skip occluded pixels.
+
+**8. Perspective‑correct**  
 &nbsp;&nbsp;Interpolate attributes × 1/W, then divide by the interpolated 1/W.
 
-**8. Shading & write‑out**  
-&nbsp;&nbsp;Perform SIMD Z‑buffer test, then apply ambient + Lambertian diffuse lighting.
+**9. Fragment Shading**  
+&nbsp;&nbsp;Sample textures and apply ambient + Lambertian diffuse lighting.
 
 ---
 
