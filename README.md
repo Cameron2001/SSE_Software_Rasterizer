@@ -16,7 +16,7 @@ cd SSE-Software-Rasterizer
 python init.py
 ```
 
-Open `SSESoftwareRasterizer.sln` in Visual Studio 2022, choose Debug or Release, and run.
+Open the `.sln` in Visual Studio, choose Debug or Release, and run.
 
 ---
 
