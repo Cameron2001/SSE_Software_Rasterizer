@@ -1,6 +1,7 @@
 #include "Framebuffer.h"
 #include <algorithm>
 #include <stdexcept>
+#include <smmintrin.h>
 
 
 Framebuffer::Framebuffer(const int w, const int h)

@@ -15,13 +15,7 @@ workspace "Rasterizer"
         location "./src"
         files { "%{prj.location}/**.h", "%{prj.location}/**.cpp" }
         
-        -- Enable SSE2 SIMD support
-        defines { "SIMD_SSE2" }
-        filter "action:vs*"
-            buildoptions { "/arch:SSE2" }
-        filter "action:not vs*"
-            buildoptions { "-msse2" }
-        filter {}
+        vectorextensions "SSE4.1" 
 
         -- Debug configuration
         filter "configurations:Debug"
