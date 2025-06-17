@@ -95,5 +95,6 @@ private:
 	static inline const __m128i INC_XI = _mm_set1_epi32(4);
 	static inline const __m128 ONE = _mm_set1_ps(1.0f);
 	static inline const __m128 NEG_ONE = _mm_set1_ps(-1.0f);
-	static inline const __m128 ZERO = _mm_setzero_ps();;
+	static inline const __m128 ZERO = _mm_setzero_ps();
+	static inline const __m128 PIXEL_OFFSETS = _mm_set_ps(3.0f, 2.0f, 1.0f, 0.0f);
 };

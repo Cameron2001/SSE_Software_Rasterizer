@@ -1,6 +1,7 @@
 #include "Model.h"
 #include <iostream>
 #include <filesystem>
+#include <stdexcept>
 #include <cassert>
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -9,7 +10,10 @@
 Model::Model(const std::vector<Mesh>& meshes)
 	: mMeshes(meshes), mModelMatrix(1.0f), mPosition(0.0f), mRotation(0.0f), mScale(1.0f)
 {
-	assert(!meshes.empty() && "Model requires at least one mesh");
+	if (meshes.empty())
+	{
+		throw std::invalid_argument("Model requires at least one mesh");
+	}
 	updateModelMatrix();
 }
 
@@ -41,23 +45,20 @@ void Model::loadModel(const std::string& filename)
 
 	std::filesystem::path filePath(filename);
 	std::string baseDir = filePath.parent_path().string() + "/";
-
 	bool success = tinyobj::LoadObj(&attrib, &shapes, &materials, &error, filename.c_str(), baseDir.c_str(), true);
-
 	if (!warning.empty())
 	{
-		std::cout << "WARN: " << warning << '\n';
-	}
-
-	if (!error.empty())
-	{
-		std::cerr << "ERROR: " << error << '\n';
+		std::cerr << "WARN: " << warning << '\n';
 	}
 
 	if (!success)
 	{
-		std::cerr << "Failed to load model: " << filename << '\n';
-		throw std::runtime_error("Failed to load OBJ file: " + filename + " - " + error);
+		std::string errorMsg = "Failed to load OBJ file: " + filename;
+		if (!error.empty())
+		{
+			errorMsg += " - " + error;
+		}
+		throw std::runtime_error(errorMsg);
 	}
 
 	if (attrib.vertices.empty())
@@ -133,7 +134,7 @@ void Model::loadModel(const std::string& filename)
 			{
 				if (indexOffset + v >= shape.mesh.indices.size())
 				{
-					std::cerr << "Warning: Face index out of bounds in model: " << filename << '\n';
+					std::cerr << "Warning: Face index out of bounds in model loading\n";
 					continue;
 				}
 
@@ -141,7 +142,7 @@ void Model::loadModel(const std::string& filename)
 
 				if (idx.vertex_index < 0 || idx.vertex_index * 3 + 2 >= static_cast<int>(attrib.vertices.size()))
 				{
-					std::cerr << "Warning: Invalid vertex index in model: " << idx.vertex_index << '\n';
+					std::cerr << "Warning: Invalid vertex index in model loading\n";
 					continue;
 				}
 
@@ -190,7 +191,6 @@ void Model::loadModel(const std::string& filename)
 			std::cerr << "Warning: Shape " << i << " has no valid vertices and was skipped\n";
 		}
 	}
-
 	if (mMeshes.empty())
 	{
 		throw std::runtime_error("No valid meshes were created from model: " + filename);
@@ -211,7 +211,10 @@ void Model::setRotation(const glm::vec3& rotation)
 
 void Model::setScale(const glm::vec3& scale)
 {
-	assert(scale.x > 0.0f && scale.y > 0.0f && scale.z > 0.0f && "Scale components must be positive");
+	if (scale.x <= 0.0f || scale.y <= 0.0f || scale.z <= 0.0f)
+	{
+		throw std::invalid_argument("Scale components must be positive");
+	}
 	mScale = scale;
 	updateModelMatrix();
 }

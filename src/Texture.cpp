@@ -3,22 +3,14 @@
 #include "stb_image.h"
 #include <iostream>
 #include <filesystem>
+#include <cassert>
 
 Texture::Texture(const std::string& path) : mWidth(0), mHeight(0), mData(nullptr), mIsLoaded(false)
 {
-	if (path.empty())
+	if (!path.empty())
 	{
-		std::cerr << "Texture path is empty" << '\n';
-		return;
+		load(path);
 	}
-
-	if (!std::filesystem::exists(path))
-	{
-		std::cerr << "Texture file does not exist: " << path << '\n';
-		return;
-	}
-
-	load(path);
 }
 
 Texture::~Texture()
@@ -39,9 +31,14 @@ bool Texture::load(const std::string& path)
 		mData = nullptr;
 	}
 
+	// path must be specified by caller
 	if (path.empty())
+		throw std::invalid_argument("Texture path cannot be empty");
+
+	if (!std::filesystem::exists(path))
 	{
-		std::cerr << "Cannot load texture from empty path" << '\n';
+		std::cerr << "Texture file does not exist: " << path << '\n';
+		mIsLoaded = false;
 		return false;
 	}
 
@@ -50,19 +47,17 @@ bool Texture::load(const std::string& path)
 	mData = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb);
 	if (!mData)
 	{
-		std::cerr << "Failed to load texture: " << path << '\n';
-		std::cerr << "Reason: " << stbi_failure_reason() << '\n';
+		std::cerr << "Failed to load texture: " << path << " - " << stbi_failure_reason() << '\n';
 		mIsLoaded = false;
 		return false;
 	}
 
 	if (width <= 0 || height <= 0)
 	{
-		std::cerr << "Invalid texture dimensions: " << width << "x" << height << '\n';
 		stbi_image_free(mData);
 		mData = nullptr;
-		mIsLoaded = false;
-		return false;
+		throw std::runtime_error(
+			"Invalid texture dimensions: " + std::to_string(width) + "x" + std::to_string(height) + " for: " + path);
 	}
 
 	mWidth = width;
@@ -78,6 +73,8 @@ __m128i Texture::sample(__m128 u, __m128 v) const
 	{
 		return _mm_set1_epi32(0x00FFFF);
 	}
+
+	assert(mWidth > 0 && mHeight > 0 && "Texture dimensions should be positive after successful load");
 
 	__m128 zero = _mm_setzero_ps();
 	__m128 one = _mm_set1_ps(1.0f);
@@ -104,7 +101,6 @@ __m128i Texture::sample(__m128 u, __m128 v) const
 	// multiply by 3 for RGB pixel data
 	__m128i idx2 = _mm_mullo_epi32(idx, _mm_set1_epi32(3));
 
-
 	alignas(16) int indices[4];
 	_mm_store_si128(reinterpret_cast<__m128i*>(indices), idx2);
 
@@ -113,6 +109,9 @@ __m128i Texture::sample(__m128 u, __m128 v) const
 	for (int i = 0; i < 4; i++)
 	{
 		int index = indices[i];
+
+		assert(index >= 0 && index + 2 < mWidth * mHeight * 3 && "Texture index out of bounds");
+
 		uint8_t r = mData[index];
 		uint8_t g = mData[index + 1];
 		uint8_t b = mData[index + 2];

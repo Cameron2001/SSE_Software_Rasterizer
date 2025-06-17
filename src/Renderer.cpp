@@ -4,6 +4,7 @@
 #include <emmintrin.h>
 #include <execution>
 #include <numeric>
+#include <iostream>
 
 Renderer::Renderer()
 {
@@ -12,6 +13,8 @@ Renderer::Renderer()
 
 void Renderer::preallocateBuffers(const size_t vertexCount)
 {
+	assert(vertexCount > 0 && "Cannot preallocate buffers for zero vertices");
+
 	const size_t triangleCount = vertexCount / 3;
 	mTriangleData.reserve(triangleCount);
 	mValidTriangles.reserve(triangleCount);
@@ -20,6 +23,12 @@ void Renderer::preallocateBuffers(const size_t vertexCount)
 
 void Renderer::renderModel(Framebuffer& framebuffer, const Camera& camera, const Model& model)
 {
+	if (model.getMeshes().empty())
+	{
+		std::cerr << "Warning: Model has no meshes to render\n";
+		return;
+	}
+
 	const glm::mat4& modelMatrix = model.getModelMatrix();
 
 	for (const auto& mesh : model.getMeshes())
@@ -29,10 +38,13 @@ void Renderer::renderModel(Framebuffer& framebuffer, const Camera& camera, const
 }
 
 void Renderer::renderMesh(Framebuffer& framebuffer, const Camera& camera, const Mesh& mesh,
-						  const glm::mat4& modelMatrix)
+                          const glm::mat4& modelMatrix)
 {
 	const auto& vertices = mesh.getVertexArray();
 	const auto material = mesh.getMaterial();
+	assert(vertices.size() > 0 && "Mesh must have vertices to be rendered");
+
+	assert(vertices.size() % 3 == 0 && "Vertex count must be divisible by 3");
 
 	const glm::mat4 mvp = camera.getViewProjectionMatrix() * modelMatrix * mesh.getLocalMatrix();
 	const glm::mat3 normalMatrix = glm::inverseTranspose(glm::mat3(modelMatrix * mesh.getLocalMatrix()));
@@ -55,10 +67,13 @@ void Renderer::renderMesh(Framebuffer& framebuffer, const Camera& camera, const 
 }
 
 void Renderer::processVerticesAndAssembleTriangles(const VertexArray& vertices, const glm::mat4& mvp,
-												   const glm::mat3& normalMatrix,
-												   const int fbWidth, const int fbHeight)
+                                                   const glm::mat3& normalMatrix,
+                                                   const int fbWidth, const int fbHeight)
 {
 	const size_t vertexCount = vertices.positionsX.size();
+
+	assert(fbWidth > 0 && fbHeight > 0 && "Framebuffer dimensions must be positive");
+
 	const int screenWidth = fbWidth;
 	const int screenHeight = fbHeight;
 	for (size_t baseVertex = 0; baseVertex + 2 < vertexCount; baseVertex += 3)
@@ -98,9 +113,7 @@ void Renderer::processVerticesAndAssembleTriangles(const VertexArray& vertices, 
 			screenY[i] = static_cast<int>((1.0f - ndcY[i]) * 0.5f * fbHeight);
 		}
 
-		if (isCulled) continue;
-
-		// Backface culling using signed area
+		if (isCulled) continue; // Backface culling using signed area
 		const float signedArea = static_cast<float>(screenX[1] - screenX[0]) * static_cast<float>(screenY[2] - screenY[
 				0]) -
 			static_cast<float>(screenX[2] - screenX[0]) * static_cast<float>(screenY[1] - screenY[0]);
@@ -128,9 +141,11 @@ void Renderer::processVerticesAndAssembleTriangles(const VertexArray& vertices, 
 }
 
 void Renderer::setupTriangle(TriangleData& triangle, int* screenX, int* screenY,
-							 const float* ndcZ, const float* invW, const VertexArray& vertices,
-							 const size_t baseVertex, const glm::mat3& normalMatrix)
+                             const float* ndcZ, const float* invW, const VertexArray& vertices,
+                             const size_t baseVertex, const glm::mat3& normalMatrix)
 {
+	assert(baseVertex + 2 < vertices.size() && "Vertex indices should be within bounds");
+
 	// calculate bounds for binning
 	triangle.minX = std::min({screenX[0], screenX[1], screenX[2]});
 	triangle.maxX = std::max({screenX[0], screenX[1], screenX[2]});
@@ -168,6 +183,24 @@ void Renderer::setupTriangle(TriangleData& triangle, int* screenX, int* screenY,
 	for (int i = 0; i < 3; ++i)
 	{
 		const size_t vertexIndex = baseVertex + i;
+		// additional bounds checking
+		if (vertexIndex >= vertices.uvsU.size() ||
+			vertexIndex >= vertices.uvsV.size() ||
+			vertexIndex >= vertices.normalsX.size() ||
+			vertexIndex >= vertices.normalsY.size() ||
+			vertexIndex >= vertices.normalsZ.size())
+		{
+			assert(false && "Vertex attribute index out of bounds");
+			// use default values for missing attributes
+			triangle.depth[i] = _mm_set1_ps(ndcZ[i]);
+			triangle.invW[i] = _mm_set1_ps(invW[i]);
+			triangle.u[i] = _mm_set1_ps(0.0f);
+			triangle.v[i] = _mm_set1_ps(0.0f);
+			triangle.normalX[i] = _mm_set1_ps(0.0f);
+			triangle.normalY[i] = _mm_set1_ps(0.0f);
+			triangle.normalZ[i] = _mm_set1_ps(1.0f);
+			continue;
+		}
 
 		triangle.depth[i] = _mm_set1_ps(ndcZ[i]);
 		triangle.invW[i] = _mm_set1_ps(invW[i]);
@@ -275,36 +308,37 @@ void Renderer::rasterizeTiles(Framebuffer& framebuffer, const Material* material
 	std::ranges::iota(tileIndices, 0);
 
 	std::for_each(std::execution::par, tileIndices.begin(), tileIndices.end(),
-				  [&](const size_t tileIndex)
-				  {
-					  const int triangleCount = mBinTriangleCounts[tileIndex];
-					  if (triangleCount == 0)
-						  return;
+	              [&](const size_t tileIndex)
+	              {
+		              const int triangleCount = mBinTriangleCounts[tileIndex];
+		              if (triangleCount == 0)
+			              return;
 
-					  const int tileX = static_cast<int>(tileIndex % mTileCountX);
-					  const int tileY = static_cast<int>(tileIndex / mTileCountX);
+		              const int tileX = static_cast<int>(tileIndex % mTileCountX);
+		              const int tileY = static_cast<int>(tileIndex / mTileCountX);
 
-					  const int tileMinX = tileX << TILE_SHIFT;
-					  const int tileMinY = tileY << TILE_SHIFT;
-					  const int tileMaxX = std::min(tileMinX + TILE_WIDTH, fbWidth);
-					  const int tileMaxY = std::min(tileMinY + TILE_HEIGHT, fbHeight);
+		              const int tileMinX = tileX << TILE_SHIFT;
+		              const int tileMinY = tileY << TILE_SHIFT;
+		              const int tileMaxX = std::min(tileMinX + TILE_WIDTH, fbWidth);
+		              const int tileMaxY = std::min(tileMinY + TILE_HEIGHT, fbHeight);
 
-					  const size_t offset = mBinTriangleOffsets[tileIndex];
-					  const size_t* triangleIndices = &mBinnedTriangles[offset];
+		              const size_t offset = mBinTriangleOffsets[tileIndex];
+		              const size_t* triangleIndices = &mBinnedTriangles[offset];
 
-					  rasterizeTile(framebuffer, material,
-									tileMinX, tileMinY, tileMaxX, tileMaxY,
-									triangleIndices, triangleCount);
-				  });
+		              rasterizeTile(framebuffer, material,
+		                            tileMinX, tileMinY, tileMaxX, tileMaxY,
+		                            triangleIndices, triangleCount);
+	              });
 }
 
 void Renderer::rasterizeScanline(Framebuffer& framebuffer, const Material* material,
-								 const TriangleData& triangle, int y, int startX, int endX) const
+                                 const TriangleData& triangle, int y, int startX, int endX) const
 {
-	const __m128 localZero = ZERO;
-	const __m128 localOne = ONE;
-	const __m128 localNegOne = NEG_ONE;
-	const __m128i localIncXi = INC_XI;
+	// validate scanline bounds
+	assert(startX <= endX && "Start X must be less than or equal to end X");
+	assert(y >= 0 && "Y coordinate must be non-negative");
+
+	if (startX >= endX) return; // empty scanline
 
 	__m128 yFloat = _mm_set1_ps(static_cast<float>(y));
 	__m128i yInt = _mm_set1_epi32(y);
@@ -313,7 +347,7 @@ void Renderer::rasterizeScanline(Framebuffer& framebuffer, const Material* mater
 	int quadCount = ((endX - baseX) + 3) >> 2; // ceiling division by 4
 
 	// process 4 pixels at once 
-	__m128 xBase = _mm_set_ps(baseX + 3.0f, baseX + 2.0f, baseX + 1.0f, baseX + 0.0f);
+	__m128 xBase = _mm_add_ps(_mm_set1_ps(static_cast<float>(baseX)), PIXEL_OFFSETS);
 	__m128i xInt = _mm_add_epi32(_mm_set1_epi32(baseX), OFFSETS_I);
 
 	// evaluate edge equations at y position
@@ -328,9 +362,9 @@ void Renderer::rasterizeScanline(Framebuffer& framebuffer, const Material* mater
 	for (int q = 0; q < quadCount; ++q)
 	{
 		// check if pixels inside triangle (edge value <= 0)
-		__m128 inside0 = _mm_cmple_ps(edge0, localZero);
-		__m128 inside1 = _mm_cmple_ps(edge1, localZero);
-		__m128 inside2 = _mm_cmple_ps(edge2, localZero);
+		__m128 inside0 = _mm_cmple_ps(edge0, ZERO);
+		__m128 inside1 = _mm_cmple_ps(edge1, ZERO);
+		__m128 inside2 = _mm_cmple_ps(edge2, ZERO);
 		int insideMask = _mm_movemask_ps(_mm_and_ps(_mm_and_ps(inside0, inside1), inside2));
 
 		if (!insideMask)
@@ -339,20 +373,20 @@ void Renderer::rasterizeScanline(Framebuffer& framebuffer, const Material* mater
 			edge0 = _mm_add_ps(edge0, triangle.edgeDeltaX[0]);
 			edge1 = _mm_add_ps(edge1, triangle.edgeDeltaX[1]);
 			edge2 = _mm_add_ps(edge2, triangle.edgeDeltaX[2]);
-			xInt = _mm_add_epi32(xInt, localIncXi);
+			xInt = _mm_add_epi32(xInt, INC_XI);
 			continue;
 		}
 
 		// barycentric coords
-		__m128 negInvArea = _mm_mul_ps(localNegOne, triangle.invArea);
+		__m128 negInvArea = _mm_mul_ps(NEG_ONE, triangle.invArea);
 		__m128 w0 = _mm_mul_ps(edge0, negInvArea);
 		__m128 w1 = _mm_mul_ps(edge1, negInvArea);
-		__m128 w2 = _mm_sub_ps(_mm_sub_ps(localOne, w0), w1);
+		__m128 w2 = _mm_sub_ps(_mm_sub_ps(ONE, w0), w1);
 
 		// interpolate depth
 		__m128 depth = _mm_fmadd_ps(w2, triangle.depth[2],
-									_mm_fmadd_ps(w1, triangle.depth[1],
-												 _mm_mul_ps(w0, triangle.depth[0])));
+		                            _mm_fmadd_ps(w1, triangle.depth[1],
+		                                         _mm_mul_ps(w0, triangle.depth[0])));
 
 		int depthPassMask = framebuffer.depthTest(xInt, yInt, depth);
 		insideMask &= depthPassMask;
@@ -362,7 +396,7 @@ void Renderer::rasterizeScanline(Framebuffer& framebuffer, const Material* mater
 			edge0 = _mm_add_ps(edge0, triangle.edgeDeltaX[0]);
 			edge1 = _mm_add_ps(edge1, triangle.edgeDeltaX[1]);
 			edge2 = _mm_add_ps(edge2, triangle.edgeDeltaX[2]);
-			xInt = _mm_add_epi32(xInt, localIncXi);
+			xInt = _mm_add_epi32(xInt, INC_XI);
 			continue;
 		}
 
@@ -382,24 +416,24 @@ void Renderer::rasterizeScanline(Framebuffer& framebuffer, const Material* mater
 
 		// interpolate attributes
 		__m128 texU = _mm_fmadd_ps(p2, triangle.u[2],
-								   _mm_fmadd_ps(p1, triangle.u[1],
-												_mm_mul_ps(p0, triangle.u[0])));
+		                           _mm_fmadd_ps(p1, triangle.u[1],
+		                                        _mm_mul_ps(p0, triangle.u[0])));
 
 		__m128 texV = _mm_fmadd_ps(p2, triangle.v[2],
-								   _mm_fmadd_ps(p1, triangle.v[1],
-												_mm_mul_ps(p0, triangle.v[0])));
+		                           _mm_fmadd_ps(p1, triangle.v[1],
+		                                        _mm_mul_ps(p0, triangle.v[0])));
 
 		__m128 normalX = _mm_fmadd_ps(p2, triangle.normalX[2],
-									  _mm_fmadd_ps(p1, triangle.normalX[1],
-												   _mm_mul_ps(p0, triangle.normalX[0])));
+		                              _mm_fmadd_ps(p1, triangle.normalX[1],
+		                                           _mm_mul_ps(p0, triangle.normalX[0])));
 
 		__m128 normalY = _mm_fmadd_ps(p2, triangle.normalY[2],
-									  _mm_fmadd_ps(p1, triangle.normalY[1],
-												   _mm_mul_ps(p0, triangle.normalY[0])));
+		                              _mm_fmadd_ps(p1, triangle.normalY[1],
+		                                           _mm_mul_ps(p0, triangle.normalY[0])));
 
 		__m128 normalZ = _mm_fmadd_ps(p2, triangle.normalZ[2],
-									  _mm_fmadd_ps(p1, triangle.normalZ[1],
-												   _mm_mul_ps(p0, triangle.normalZ[0])));
+		                              _mm_fmadd_ps(p1, triangle.normalZ[1],
+		                                           _mm_mul_ps(p0, triangle.normalZ[0])));
 
 		__m128i colors;
 		fragmentShader(texU, texV, normalX, normalY, normalZ, material, colors);
@@ -410,18 +444,22 @@ void Renderer::rasterizeScanline(Framebuffer& framebuffer, const Material* mater
 		edge0 = _mm_add_ps(edge0, triangle.edgeDeltaX[0]);
 		edge1 = _mm_add_ps(edge1, triangle.edgeDeltaX[1]);
 		edge2 = _mm_add_ps(edge2, triangle.edgeDeltaX[2]);
-		xInt = _mm_add_epi32(xInt, localIncXi);
+		xInt = _mm_add_epi32(xInt, INC_XI);
 	}
 }
 
 void Renderer::rasterizeTile(Framebuffer& framebuffer, const Material* material,
-							 const int tileMinX, const int tileMinY, const int tileMaxX, const int tileMaxY,
-							 const size_t* triangleIndices, const int triangleCount) const
+                             const int tileMinX, const int tileMinY, const int tileMaxX, const int tileMaxY,
+                             const size_t* triangleIndices, const int triangleCount) const
 {
+	// validate input parameters
+	assert(triangleIndices && "Triangle indices pointer cannot be null");
+	assert(triangleCount >= 0 && "Triangle count must be non-negative");
+
 	for (int i = 0; i < triangleCount; ++i)
 	{
 		const size_t triangleIndex = triangleIndices[i];
-		if (triangleIndex >= mTriangleData.size()) continue;
+		assert(triangleIndex < mTriangleData.size() && "Triangle index out of bounds");
 
 		const TriangleData& triangle = mTriangleData[triangleIndex];
 
@@ -440,7 +478,7 @@ void Renderer::rasterizeTile(Framebuffer& framebuffer, const Material* material,
 }
 
 void Renderer::fragmentShader(__m128 u, __m128 v, __m128 normalX, __m128 normalY, __m128 normalZ,
-							  const Material* material, __m128i& colors) const
+                              const Material* material, __m128i& colors) const
 {
 	if (!material)
 	{

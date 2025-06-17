@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <stdexcept>
 
 struct VertexArray
 {
@@ -17,6 +18,10 @@ struct VertexArray
 	// utility methods
 	void resize(const size_t size)
 	{
+		if (size == 0)
+		{
+			throw std::invalid_argument("VertexArray size cannot be zero");
+		}
 		positionsX.resize(size);
 		positionsY.resize(size);
 		positionsZ.resize(size);
@@ -31,6 +36,10 @@ struct VertexArray
 
 	void reserve(const size_t size)
 	{
+		if (size == 0)
+		{
+			throw std::invalid_argument("VertexArray reserve size cannot be zero");
+		}
 		positionsX.reserve(size);
 		positionsY.reserve(size);
 		positionsZ.reserve(size);

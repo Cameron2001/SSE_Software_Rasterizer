@@ -7,4 +7,5 @@ class ConanTutorialRecipe(ConanFile):
     def requirements(self):
         self.requires("glm/1.0.1")
         self.requires("stb/cci.20230920")
+        self.requires("gtest/1.14.0")
 

@@ -3,6 +3,7 @@
 #include <format>
 #include <chrono>
 #include <filesystem>
+#include <cassert>
 #include "Framebuffer.h"
 #include "Model.h"
 #include "Camera.h"
@@ -68,7 +69,8 @@ int main()
 			running = window.processMessages();
 
 			Framebuffer* backBuffer = window.getBackBuffer();
-			assert(backBuffer && "Back buffer is null");
+			assert(backBuffer && "Back buffer should not be null");
+
 			backBuffer->clear();
 			backBuffer->clearDepth();
 

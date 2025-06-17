@@ -1,9 +1,13 @@
 #include "Mesh.h"
+#include <stdexcept>
 #include <cassert>
 
 Mesh::Mesh(VertexArray vertexArray) : mVertexArray(std::move(vertexArray)), mLocalMatrix(1.0f)
 {
-	assert(mVertexArray.size()>0 && "Vertex array cannot be empty");
+	if (mVertexArray.size() == 0)
+	{
+		throw std::invalid_argument("Vertex array cannot be empty");
+	}
 
 	validateVertexArray();
 }
@@ -11,24 +15,37 @@ Mesh::Mesh(VertexArray vertexArray) : mVertexArray(std::move(vertexArray)), mLoc
 Mesh::Mesh(VertexArray vertexArray, const std::shared_ptr<Material>& material) : mVertexArray(std::move(vertexArray)),
 	mLocalMatrix(1.0f), mMaterial(material)
 {
-	assert(mVertexArray.size()>0 && "Vertex array cannot be empty");
-	assert(material && "Material cannot be null");
+	if (mVertexArray.size() == 0)
+	{
+		throw std::invalid_argument("Vertex array cannot be empty");
+	}
+
+	if (!material)
+	{
+		throw std::invalid_argument("Material cannot be null");
+	}
 
 	validateVertexArray();
 }
 
 void Mesh::validateVertexArray() const
 {
-	assert(mVertexArray.positionsX.size() == mVertexArray.positionsY.size() &&
-		mVertexArray.positionsY.size() == mVertexArray.positionsZ.size() &&
-		"Position arrays must have the same size");
+	if (mVertexArray.positionsX.size() != mVertexArray.positionsY.size() ||
+		mVertexArray.positionsY.size() != mVertexArray.positionsZ.size())
+	{
+		throw std::invalid_argument("Position arrays must have the same size");
+	}
 
-	assert(mVertexArray.normalsX.size() == mVertexArray.normalsY.size() &&
-		mVertexArray.normalsY.size() == mVertexArray.normalsZ.size() &&
-		"Normal arrays must have the same size");
+	if (mVertexArray.normalsX.size() != mVertexArray.normalsY.size() ||
+		mVertexArray.normalsY.size() != mVertexArray.normalsZ.size())
+	{
+		throw std::invalid_argument("Normal arrays must have the same size");
+	}
 
-	assert(mVertexArray.uvsU.size() == mVertexArray.uvsV.size() &&
-		"UV arrays must have the same size");
+	if (mVertexArray.uvsU.size() != mVertexArray.uvsV.size())
+	{
+		throw std::invalid_argument("UV arrays must have the same size");
+	}
 }
 
 void Mesh::setLocalMatrix(const glm::mat4& matrix)
@@ -38,6 +55,10 @@ void Mesh::setLocalMatrix(const glm::mat4& matrix)
 
 void Mesh::setMaterial(const std::shared_ptr<Material>& material)
 {
-	assert(material && "Material cannot be null");
+	if (!material)
+	{
+		throw std::invalid_argument("Material cannot be null");
+	}
+
 	mMaterial = material;
 }

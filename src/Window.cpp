@@ -1,7 +1,8 @@
 #include "Window.h"
 #include <stdexcept>
 #include <cassert>
-#include <immintrin.h> // Add SIMD instructions header
+#include <iostream>
+#include <immintrin.h>
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -9,7 +10,14 @@ static Window* g_WindowInstance = nullptr;
 
 Window::Window(int width, int height, const std::string& title) : mTitle(title)
 {
-	assert(width > 0 && height > 0 && "window dimensions must be positive");
+	if (width <= 0 || height <= 0)
+	{
+		throw std::invalid_argument("Window dimensions must be positive");
+	}
+	if (title.empty())
+	{
+		throw std::invalid_argument("Window title cannot be empty");
+	}
 
 	g_WindowInstance = this;
 
@@ -210,10 +218,9 @@ void Window::blit() const
 	}
 }
 
-
 bool Window::processMessages() const
 {
-	assert(mWindowHandle && "window handle is null");
+	assert(mWindowHandle && "Window handle should be valid during window lifetime");
 
 	MSG msg = {};
 	while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
@@ -232,7 +239,13 @@ bool Window::processMessages() const
 
 void Window::setTitle(const std::string& title)
 {
-	assert(mWindowHandle && "window handle is null");
+	assert(mWindowHandle && "Window handle should be valid during window lifetime");
+
+	if (title.empty())
+	{
+		std::cerr << "Warning: Setting empty window title\n";
+	}
+
 	mTitle = title;
 
 	const std::wstring wTitle(title.begin(), title.end());

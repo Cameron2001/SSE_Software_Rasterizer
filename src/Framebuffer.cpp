@@ -1,5 +1,6 @@
 #include "Framebuffer.h"
 #include <algorithm>
+#include <cassert>
 #include <stdexcept>
 #include <smmintrin.h>
 
@@ -34,52 +35,47 @@ void Framebuffer::setPixel(const __m128i x, const __m128i y, const __m128i color
 	if (mask == 0) return;
 
 	alignas(16) int xs[4], ys[4];
-	alignas(16) uint8_t c[16]; // 16 bytes for alignment, using 3 per pixel (rgb)
+	alignas(16) uint8_t c[16];
 	_mm_store_si128((__m128i*)xs, x);
 	_mm_store_si128((__m128i*)ys, y);
 	_mm_store_si128((__m128i*)c, color);
 
-	// process only pixels enabled by mask bits
 	for (int i = 0; i < 4; ++i)
 		if (mask & (1 << i))
 		{
-			const int x = xs[i];
-			const int y = ys[i];
-			if (!isInBounds(x, y)) continue;
+			const int px = xs[i];
+			const int py = ys[i];
 
-			// calculate pixel offset (y * width + x) * 3 bytes
-			const size_t idx = (static_cast<size_t>(y) * mWidth + x) * 3;
-			// safety check to prevent out of bounds memory access
-			if (idx + 2 < mPixels.size())
-			{
-				// write rgb color
-				mPixels[idx] = c[i * 4]; // r
-				mPixels[idx + 1] = c[i * 4 + 1]; // g
-				mPixels[idx + 2] = c[i * 4 + 2]; // b
-			}
+			assert(isInBounds(px, py) && "Pixel coordinates out of bounds");
+
+			const size_t idx = (static_cast<size_t>(py) * mWidth + px) * 3;
+			assert(idx + 2 < mPixels.size() && "Pixel index out of bounds");
+
+			mPixels[idx] = c[i * 4]; // r
+			mPixels[idx + 1] = c[i * 4 + 1]; // g
+			mPixels[idx + 2] = c[i * 4 + 2]; // b
 		}
 }
 
-
 void Framebuffer::setDepth(const __m128i xI, const __m128i yI, const __m128 depth, const int mask)
 {
-	if (!mask) return;
+	assert(mask >= 0 && mask <= 0xF && "Invalid mask value");
+	if (mask == 0) return;
 
-	// fast path: all 4 pixels are valid
+	// fast path: all 4 pixels
 	if (mask == 0xF)
 	{
 		const int x0 = _mm_cvtsi128_si32(xI);
 		const int y0 = _mm_cvtsi128_si32(yI);
+		assert(isInBounds(x0, y0) && isInBounds(x0 + 3, y0) && "Pixel coordinates out of bounds");
 
-		if (!isInBounds(x0, y0) || !isInBounds(x0 + 3, y0)) return;
-
-		// write all 4 depth values in one simd operation
-		const size_t base = y0 * mWidth + x0;
-		_mm_store_ps(mDepthBuffer.data() + base, depth);
+		const size_t base = static_cast<size_t>(y0) * mWidth + x0;
+		assert(base + 3 < mDepthBuffer.size() && "Depth buffer index out of bounds");
+		_mm_storeu_ps(mDepthBuffer.data() + base, depth);
 		return;
 	}
 
-	// slow path: handle individual pixels
+	// slow path: individual pixels
 	alignas(16) int xs[4], ys[4];
 	alignas(16) float ds[4];
 	_mm_store_si128((__m128i*)xs, xI);
@@ -89,28 +85,28 @@ void Framebuffer::setDepth(const __m128i xI, const __m128i yI, const __m128 dept
 	for (int i = 0; i < 4; ++i)
 		if (mask & (1 << i))
 		{
-			if (!isInBounds(xs[i], ys[i])) continue;
-
-			const size_t index = ys[i] * mWidth + xs[i];
+			assert(isInBounds(xs[i], ys[i]) && "Pixel coordinates out of bounds");
+			const size_t index = static_cast<size_t>(ys[i]) * mWidth + xs[i];
+			assert(index < mDepthBuffer.size() && "Depth buffer index out of bounds");
 			mDepthBuffer[index] = ds[i];
 		}
 }
 
-
 int Framebuffer::depthTest(const __m128i x, const __m128i y, const __m128 depth) const
 {
 	// calculate buffer indices: y * width + x
-	const __m128i idx = _mm_add_epi32(_mm_mullo_epi32(y, _mm_set1_epi32(mWidth)), x);
+	const __m128i idxVec = _mm_add_epi32(_mm_mullo_epi32(y, _mm_set1_epi32(mWidth)), x);
 
-	// load existing depth values 
-	alignas(16) int xs[4];
-	_mm_store_si128((__m128i*)xs, idx);
+	alignas(16) int idxArr[4];
+	_mm_store_si128((__m128i*)idxArr, idxVec);
+	// validate indices for internal consistency
+	for (int i = 0; i < 4; ++i)
+		assert(
+		idxArr[i] >= 0 && static_cast<size_t>(idxArr[i]) < mDepthBuffer.size() && "Depth buffer index out of bounds");
 
-	const __m128 curr = _mm_loadu_ps(mDepthBuffer.data() + xs[0]);
+	const __m128 curr = _mm_loadu_ps(mDepthBuffer.data() + idxArr[0]);
 
 	// depth test
 	const __m128 cmp = _mm_cmplt_ps(depth, curr);
-
-	// return 4-bit mask
 	return _mm_movemask_ps(cmp);
 }
