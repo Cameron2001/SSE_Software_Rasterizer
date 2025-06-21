@@ -84,7 +84,7 @@ Open the `.sln` in Visual Studio, choose Debug or Release, and run.
 - Intel Intrinsics Guide:  
   https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html  
 - Rasterization Blog:  
-  https://tayfunkayhan.wordpress.com/2019/07/26/chasing-triangles-in-a-tile-based-rasterizer/  
+  https://jtsorlinis.github.io/rendering-tutorial
 - Rasterization Video:  
   https://www.youtube.com/watch?v=k5wtuKWmV48
 - Conan + Premake Template:  
